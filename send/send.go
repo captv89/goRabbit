@@ -67,7 +67,7 @@ func (p *QueuePublisher) Publish(ctx context.Context, msg []byte) error {
 		return err
 	}
 
-	log.Printf(" [x] Sent %s", msg)
+	log.Printf("[->] Sent message: %s", msg)
 	return nil
 }
 

@@ -15,16 +15,11 @@ func main() {
 	publisher := send.NewQueuePublisher("amqp://guest:guest@localhost:8080/", "hello")
 
 	// create a receiver
-	receiver, err := receive.NewQueueReceiver("amqp://guest:guest@localhost:8080/", receive.Queue{Name: "hello", Durable: false, AutoAck: true})
-	if err != nil {
-		log.Fatalf("Failed to create receiver: %v", err)
-	}
+	receiver := receive.NewQueueReceiver("amqp://guest:guest@localhost:8080/", receive.Queue{Name: "hello", Durable: false, AutoAck: true})
 
 	// Start the receiver
 	go func() {
-		if err := receiver.Receive(); err != nil {
-			log.Fatalf("Failed to receive: %v", err)
-		}
+		receiver.Receive()
 	}()
 
 	// Send a message every 5 seconds

@@ -1,10 +1,15 @@
 package receive
 
 import (
-	"fmt"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"log"
 )
+
+func failOnError(err error, msg string) {
+	if err != nil {
+		log.Panicf("%s: %s", msg, err)
+	}
+}
 
 type Queue struct {
 	Name    string
@@ -18,15 +23,15 @@ type QueueReceiver struct {
 	q    *amqp.Queue
 }
 
-func NewQueueReceiver(url string, q Queue) (*QueueReceiver, error) {
+func NewQueueReceiver(url string, q Queue) *QueueReceiver {
 	conn, err := amqp.Dial(url)
 	if err != nil {
-		return nil, err
+		failOnError(err, "Failed to connect to RabbitMQ")
 	}
 
 	ch, err := conn.Channel()
 	if err != nil {
-		return nil, err
+		failOnError(err, "Failed to open a channel")
 	}
 
 	_, err = ch.QueueDeclare(
@@ -38,17 +43,17 @@ func NewQueueReceiver(url string, q Queue) (*QueueReceiver, error) {
 		nil,
 	)
 	if err != nil {
-		return nil, err
+		failOnError(err, "Failed to declare a queue")
 	}
 
 	return &QueueReceiver{
 		conn: conn,
 		ch:   ch,
 		q:    &amqp.Queue{Name: q.Name},
-	}, nil
+	}
 }
 
-func (r *QueueReceiver) Receive() error {
+func (r *QueueReceiver) Receive() {
 	msgs, err := r.ch.Consume(
 		r.q.Name,
 		"",
@@ -59,16 +64,14 @@ func (r *QueueReceiver) Receive() error {
 		nil,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to register a consumer: %v", err)
+		failOnError(err, "Failed to register a consumer")
 	}
 
 	go func() {
 		for msg := range msgs {
-			log.Printf("Received message: %s", string(msg.Body))
+			log.Printf("[<-] Received message: %s", string(msg.Body))
 		}
 	}()
-
-	return nil
 }
 
 func (r *QueueReceiver) Close() error {
