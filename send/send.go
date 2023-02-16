@@ -2,10 +2,8 @@ package send
 
 import (
 	"context"
-	"log"
-	"time"
-
 	amqp "github.com/rabbitmq/amqp091-go"
+	"log"
 )
 
 func failOnError(err error, msg string) {
@@ -14,38 +12,78 @@ func failOnError(err error, msg string) {
 	}
 }
 
-func DemoSend() {
-	// Connect to RabbitMQ server on docker container
-	conn, err := amqp.Dial("amqp://guest:guest@localhost:8080/")
-	failOnError(err, "Failed to connect to RabbitMQ")
-	defer conn.Close()
+// QueuePublisher is a wrapper around the AMQP connection and channel
+type QueuePublisher struct {
+	connection *amqp.Connection
+	channel    *amqp.Channel
+	queue      amqp.Queue
+}
+
+// NewQueuePublisher creates a new QueuePublisher instance
+func NewQueuePublisher(url string, queueName string) *QueuePublisher {
+	conn, err := amqp.Dial(url)
+	if err != nil {
+		failOnError(err, "Failed to connect to RabbitMQ")
+	}
 
 	ch, err := conn.Channel()
-	failOnError(err, "Failed to open a channel")
-	defer ch.Close()
+	if err != nil {
+		failOnError(err, "Failed to open a channel")
+	}
 
 	q, err := ch.QueueDeclare(
-		"hello", // name
-		false,   // durable
-		false,   // delete when unused
-		false,   // exclusive
-		false,   // no-wait
-		nil,     // arguments
+		queueName, // name
+		false,     // durable
+		false,     // delete when unused
+		false,     // exclusive
+		false,     // no-wait
+		nil,       // arguments
 	)
-	failOnError(err, "Failed to declare a queue")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	if err != nil {
+		failOnError(err, "Failed to declare a queue")
+	}
 
-	body := "Hello World!"
-	err = ch.PublishWithContext(ctx,
-		"",     // exchange
-		q.Name, // routing key
-		false,  // mandatory
-		false,  // immediate
+	return &QueuePublisher{
+		connection: conn,
+		channel:    ch,
+		queue:      q,
+	}
+}
+
+// Publish sends a message to the queue
+func (p *QueuePublisher) Publish(ctx context.Context, msg []byte) error {
+	err := p.channel.PublishWithContext(
+		ctx,
+		"",
+		p.queue.Name,
+		false,
+		false,
 		amqp.Publishing{
 			ContentType: "text/plain",
-			Body:        []byte(body),
+			Body:        msg,
 		})
-	failOnError(err, "Failed to publish a message")
-	log.Printf(" [x] Sent %s\n", body)
+
+	if err != nil {
+		return err
+	}
+
+	log.Printf(" [x] Sent %s", msg)
+	return nil
+}
+
+// Close closes the AMQP connection
+func (p *QueuePublisher) Close() error {
+	if p.channel != nil {
+		if err := p.channel.Close(); err != nil {
+			return err
+		}
+	}
+
+	if p.connection != nil {
+		if err := p.connection.Close(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
